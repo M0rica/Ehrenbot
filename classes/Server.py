@@ -32,9 +32,9 @@ class Server:
             "anti_spam": "on",
             "spam_block_time": 10,
 
-            "vote_time": 2,
+            "vote_time": 15,
 
-            "lottery_mode": "off",
+            "lottery": "off",
         }
 
         self.blocked_users = {}
@@ -101,7 +101,7 @@ class Server:
                 "vote_time": self.settings["vote_time"],
                 "vote_threshold": 2,
 
-                "lottery_mode": self.settings["lottery_mode"]
+                "lottery": self.settings["lottery"]
             }
             data["blocked_users"] = self.blocked_users
             data["table_channel"] = self.table_channel.id
@@ -241,7 +241,7 @@ class Server:
             "spam_block_time": 10,
 
             "vote_time": 15,
-            "vote_threshold": 2,
+            "vote_threshold": 3,
 
             "lottery_mode": "off",
         }
@@ -595,7 +595,7 @@ class Server:
 
         elif mode == 'help':
 
-            desc += 'Wirklich witzig...'
+            desc += 'Jaa wirklich witzig...'
             member.transaction(-10, 'Wollte witzig sein')
 
         elif mode == 'stats':
