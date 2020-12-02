@@ -1,6 +1,6 @@
 import datetime
 
-admin = 'Morica#8213'
+admin = 'ADMINNAME#ADMINTAG'
 
 
 def log(info, timestamp=datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), server='SYSTEM'):
