@@ -30,6 +30,7 @@ class Server:
             "role": self.guild_obj.default_role,
 
             "anti_spam": "on",
+            "censor_chat": False,
             "spam_block_time": 10,
 
             "vote_time": 15,
@@ -37,6 +38,7 @@ class Server:
             "lottery": "off",
         }
 
+        self.banned_words = []
         self.blocked_users = {}
         self.warned_users = []
         self.lottery = {}
@@ -49,13 +51,12 @@ class Server:
                                 'Zusätzlich hat jeder einmal Täglich die Möglichkeit, 10 Ehre an einen Member seiner Wahl zu geben :money_with_wings:.\n\nUm über alle Funktionen und deren gebrauch zu erfahren, einfach `ehre help` eingeben.\n\n' \
                                 'Sollte sich jemand nicht an meine Regeln oder die Regeln des Servers halten, ist es mir ein Vergnügen denjenigen darauf aufmerksam zu machen :smiling_imp:.'
 
-
         if self.has_saved_data():
             self.log('Loading saved server data...')
             self.load()
 
         else:
-            log('Setting up new server...')
+            log(f'Setting up new server {self.name}...')
             asyncio.run_coroutine_threadsafe(self.setup(), asyncio.get_event_loop())
 
         self.members = {}
@@ -69,14 +70,13 @@ class Server:
         vote_threshold = int(round(len(self.members) / 12.5))
         self.settings["vote_threshold"] = vote_threshold if vote_threshold >= 3 else 3
 
-
-    #======SYSTEM INTERNAL FUNCTIONS======#
+    # ======SYSTEM INTERNAL FUNCTIONS======#
 
     def has_saved_data(self):
 
         return os.path.isdir(self.save_dir)
 
-    #=====Log special events to server specific file and systemwide file=====#
+    # =====Log special events to server specific file and systemwide file=====#
     def log(self, info):
 
         timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -86,7 +86,7 @@ class Server:
         with open(f'{self.save_dir}/logs/{datetime.datetime.now().strftime("%d_%m_%Y")}.log', 'a') as f:
             f.write(info)
 
-    #=====Save data to disk=====#
+    # =====Save data to disk=====#
     def save(self):
 
         self.log('Saving server data...')
@@ -96,6 +96,7 @@ class Server:
                 "role": self.settings["role"].id,
 
                 "anti_spam": self.settings["anti_spam"],
+                "censor_chat": self.settings["censor_chat"],
                 "spam_block_time": self.settings["spam_block_time"],
 
                 "vote_time": self.settings["vote_time"],
@@ -114,10 +115,13 @@ class Server:
         for member in self.members:
             self.members[member].save()
 
-    #=====Load data from disk=====#
+    # =====Load data from disk=====#
     def load(self):
 
         try:
+
+            self.load_base_data()
+
             with open(f'{self.save_dir}/data.json', 'r') as save:
                 data = json.load(save)
 
@@ -132,7 +136,6 @@ class Server:
             self.votes = {v: Vote.from_dict(data["votes"][v]) for v in data["votes"]}
 
             if self.table_channel == None or self.default_channel == None:
-
                 asyncio.run_coroutine_threadsafe(self.create_discord_channels(), asyncio.get_event_loop())
 
             new_blocked_list = {}
@@ -144,8 +147,12 @@ class Server:
             print(e)
             asyncio.run_coroutine_threadsafe(self.repair(), asyncio.get_event_loop())
 
+    def load_base_data(self):
 
-    #=====Set new server up, either on join or on reboot=====#
+        with open('base_data/banned_words_eng.txt', 'r') as f:
+            self.banned_words = f.read().split('\n')
+
+    # =====Set new server up, either on join or on reboot=====#
     async def setup(self):
 
         log('Creating folders...', server=self.name)
@@ -157,32 +164,28 @@ class Server:
         for folder in folders:
             os.mkdir(f'{self.save_dir}/{folder}')
 
-        open(f'{self.save_dir}/{self.name}', 'a').close() # Server folders are named after their discord server ids, file with real server name for clarification
+        open(f'{self.save_dir}/{self.name}',
+             'a').close()  # Server folders are named after their discord server ids, file with real server name for clarification
 
-        self.log('Creating discord channels...')
+        self.log('Creating discord channels and sending messages...')
 
         await self.create_discord_channels()
 
-        self.log('Sending default messages...')
-
-        emb = discord.Embed(title='Vielen Dank, dass ihr mich auf euren Server gelassen habt!',
-                            description=self.description_text, colour=random.randint(0, 16777215))
-
-        await self.default_channel.send(embed=emb)
-
         self.log('Successfully send messages!')
+
+        self.load_base_data()
 
         self.log('Setup completed!')
         self.save()
 
-    #=====Try to repair server if data or channels are missing=====#
+    # =====Try to repair server if data or channels are missing=====#
     async def repair(self):
 
         self.log('An error occurred while loading saved data, trying to repair server data...')
         self.set_default_settings()
         await self.create_discord_channels()
 
-    #=====Create standart discord channels on a server, either called on setup or repair=====#
+    # =====Create standart discord channels on a server, either called on setup or repair=====#
     async def create_discord_channels(self):
 
         category_exists = False
@@ -211,12 +214,15 @@ class Server:
                         self.table_id = table_msg[0].id
 
         if not category_exists:
-
             category = await self.guild_obj.create_category('ehrenbot')
 
         if not default_channel_exists:
+            self.default_channel = await self.guild_obj.create_text_channel('ehrenchannel', category=category,
+                                                                            topic='Dieser channel ist ausschließlich für die Interaktion mit Ehrenbot dar.')
+            emb = discord.Embed(title='Vielen Dank, dass ihr mich auf euren Server gelassen habt!',
+                                description=self.description_text, colour=random.randint(0, 16777215))
 
-            self.default_channel = await self.guild_obj.create_text_channel('ehrenchannel', category=category, topic='Dieser channel ist ausschließlich für die Interaktion mit Ehrenbot dar.')
+            await self.default_channel.send(embed=emb)
 
         if not table_channel_exists:
 
@@ -231,37 +237,58 @@ class Server:
 
             self.table_id = msg.id
 
-    #=====Set default server settings if data is missing or corrupt=====#
+    # =====Set default server settings if data is missing or corrupt=====#
     def set_default_settings(self):
 
         self.settings = {
             "role": self.guild_obj.default_role,
 
             "anti_spam": "on",
+            "censor_chat": False,
             "spam_block_time": 10,
 
             "vote_time": 15,
             "vote_threshold": 3,
 
-            "lottery_mode": "off",
+            "lottery": "off",
         }
 
-    #=====Add new member to internal member list=====#
+    # =====Add new member to internal member list=====#
     def add_member(self, member):
 
         self.members[member.id] = Member(member.id, member.display_name, self.save_dir)
 
-    #======NONE-INTERNAL FUNCTIONS======#
+    # ======NONE-INTERNAL FUNCTIONS======#
 
-    def process_msg(self, ctx):
+    # =====Process every message send on this guild, i.e. antispam=====#
+    async def process_msg(self, ctx):
 
         member = self.members[ctx.author.id]
         msg = ctx.content
+
+        # antispam
         msg_len = int(len(msg) / 100)
         msg_len = 1 if msg_len == 0 else msg_len
         member.antispam_score += msg_len
 
-    #=====Update server events, such as votes=====#
+        msg = msg.lower()
+        msg_list = msg.split()
+
+        # inappropriate language
+        if self.settings["censor_chat"]:
+
+            banned_word = False
+            for word in self.banned_words:
+                if word in msg_list:
+                    banned_word = True
+
+            if banned_word:
+                self.transaction(member, -25, "unerlaubte Wörter benutzt")
+                await ctx.channel.send(f'Achte auf deine Wortwahl, **{member.name}**!', delete_after=15)
+                await ctx.delete()
+                member.violations += 1
+
+    # =====Update server events, such as votes=====#
     async def update(self):
 
         self.log('Updating...')
@@ -276,14 +303,11 @@ class Server:
 
         emb = discord.Embed(title='Ehrenwerte Tabelle', colour=6614463)
 
-        for member in self.members:
-
-
-            account_field = f'```\n{self.members[member].balance} Ehre```'
-            emb.add_field(name=f'**{self.members[member].name}**', value=account_field)
+        for member in self.members.values():
+            account_field = f'```\n{member.balance} Ehre```'
+            emb.add_field(name=f'**{member.name}**', value=account_field)
 
         await old_msg.edit(embed=emb)
-
 
         if self.updates % 5 == 0:
 
@@ -310,6 +334,20 @@ class Server:
         self.log('Running antispam...')
         await self.perform_antispam()
 
+        for member in self.members.values():
+
+            if member.warns >= 3:
+                await self.suspend_member(member)
+                member.warns = 0
+                member.bans += 1
+
+            if member.violations >= 3:
+
+                if member.warns == 0:
+                    await self.warn_member(member)
+                member.violations = 0
+                member.warns += 1
+
     async def perform_antispam(self):
 
         for member in self.members.values():
@@ -320,21 +358,28 @@ class Server:
                     await self.suspend_member(member)
 
                 else:
-                    await self.warn_member(member)
+                    await self.warn_member(member,
+                                           reason='Weißt du, ich finde Spaming echt assozial, also entspann dich mal :island: Du willst doch keine Beurlaubung oder :face_with_raised_eyebrow:')
+                    member.warns = 0
 
             member.antispam_score = 0
 
-    async def warn_member(self, member):
+    # warn member to follow the rules
+    async def warn_member(self, member,
+                          reason=f'Es gibt echt nicht viele Regeln die du befolgen musst, aber wenn du so weiter machst schaffst du es trozdem dir ne beurlaubung zu verdiehnen...'):
 
         member.warned = True
-        self.transaction(member, -25, 'Vorwarnung für Spaming')
+        self.transaction(member, -25, 'Vorwarnung wegen Regelverstoß')
         member = self.guild_obj.get_member(member.member_id)
 
-        await member.send('Weißt du, Spaming ist echt assozial, also entspann dich mal :island: Du willst doch keine Beurlaubung oder :face_with_raised_eyebrow:')
+        await member.send(reason)
         self.log(f'Warned {member.display_name} for spaming')
 
-    async def suspend_member(self, member):
+    # suspend member from chat for a period of time
+    async def suspend_member(self, member, reason=''):
 
+        if not reason:
+            reason = f':partying_face: Herzlichen Glückwunsch! Du, ja, genau **du** hast dir eine {blocked_user_entry["block_time"]} Minuten Auszeit auf dem Server **{self.name}** verdient! Genieße sie!'
         blocked_user_entry = {
             "blocked_at": int(datetime.datetime.now().strftime("%Y%m%d%H%M")),
             "block_time": self.settings["spam_block_time"]
@@ -348,21 +393,21 @@ class Server:
 
         member = self.guild_obj.get_member(member.member_id)
         await member.remove_roles(self.settings["role"])
-        await member.send(f':partying_face: Herzlichen Glückwunsch! Du, ja, genau **du** hast dir eine {blocked_user_entry["block_time"]} Minuten Auszeit auf dem Server **{self.name}** verdient! Genieße sie!')
+        await member.send(reason)
         await asyncio.sleep(3)
-        await member.send('By the way, Spaming wird bei uns mit der Peitsche bestraft, trau dich nur wieder on zu kommen :smiling_imp:')
+        await member.send(
+            'By the way, Regelverstöße werden bei uns mit der Peitsche bestraft, trau dich nur wieder on zu kommen :smiling_imp:')
 
-    #=====Reset daily donations for this server=====#
+    # =====Reset daily donations for this server=====#
     def reset_donations(self):
 
         for member in self.members:
-
             member = self.members[member]
             member.donated = False
 
         return ':white_check_mark: Tägliche Spenden sind nun wieder verfügbar!'
 
-    #=====Get who donated today and who didn't=====#
+    # =====Get who donated today and who didn't=====#
     def get_donations(self):
 
         donated = 0
@@ -378,8 +423,7 @@ class Server:
 
         return f':white_check_mark: Members die donated haben: **{donated}**\n:x: Members die nicht donated haben: **{not_donated}**'
 
-
-    #=====Evaluate a vote after set amount of time=====#
+    # =====Evaluate a vote after set amount of time=====#
     async def eval_vote(self, member):
 
         vote = self.votes[member]
@@ -387,14 +431,14 @@ class Server:
         to_member = self.members[vote.to_member]
 
         channel = self.client.get_channel(vote.message_channel)
-        emb, all_score, score = vote.eval(self, channel, self.settings["vote_threshold"], member, to_member, self.members)
+        emb, all_score, score = vote.eval(self, channel, self.settings["vote_threshold"], member, to_member,
+                                          self.members)
         self.log(f'Evaluation of vote of {member.name}: Participants: {all_score}, Score: {score}')
 
         del self.votes[str(member.member_id)]
         member.has_vote = False
 
         await channel.send(embed=emb)
-
 
     def transaction(self, member, amount: int, note: str):
 
@@ -404,8 +448,7 @@ class Server:
         except TransactionError:
             pass
 
-
-    #======DISCORD COMMANDS======#
+    # ======DISCORD COMMANDS======#
 
     def _settings(self, setting, change):
 
@@ -415,9 +458,11 @@ class Server:
         if not setting:
 
             desc += '**Aktuelle Settings**'
+
             desc += f'\n\nRolle für alle Textchannels: **{self.settings["role"]}**'
 
             desc += f'\nAnti-spam: **{self.settings["anti_spam"]}**'
+            desc += f'\nChat zensieren: **{"on" if self.settings["censor_chat"] else "off"}**'
             desc += f'\nBlockierung bei starkem Verstoß gegen Regeln: **{self.settings["spam_block_time"]} min**'
 
             desc += f'\nZeit für Abstimmungen: **{self.settings["vote_time"]} min**'
@@ -452,6 +497,33 @@ class Server:
                 else:
 
                     desc += f':x: Die Rolle **{change}** gibts auf diesem Server nicht. Wenn du die Role ändern möchtest, solltest du eine vorhandene Rolle nehmen!'
+
+        elif setting in ['chat']:
+
+            if not change:
+
+                desc += '**Chateinstellungen** :speech_balloon:\n\n'
+
+                desc += f'**Chat zensieren:** {"on" if self.settings["censor_chat"] else "off"}\n'
+
+                desc += '**Einstellung ändern:** `ehre settings chat <einstellung>`\n'
+                desc += '**Gültige Einstellungen:** `censor` / `zensieren`: Zensieren des Chats an-/ausschalten.\n'
+
+                desc += '**Info:** Generelle Einstellungen für den Chat auf diesem Server. Hier kann etwa festgelegt werden, ob der Chat zensiert werden soll oder nicht.\n'
+
+            elif change in ['censor', 'zensieren']:
+
+                if self.settings["censor_chat"]:
+                    self.settings["censor_chat"] = False
+                    desc += f'Chat wird jetzt nichtmehr zensiert!'
+
+                else:
+                    self.settings["censor_chat"] = True
+                    desc += f'Chat wird jetzt zensiert!'
+
+            else:
+
+                desc += 'Unbekanntes Befehlsargument für `chat`!'
 
         elif setting in ['vote', 'votetime', 'votum']:
 
@@ -506,6 +578,7 @@ class Server:
                 if self.settings["anti_spam"] == "off":
 
                     desc += f':white_check_mark: Nervensägen übernehme ich ab jetzt... :smirk:'
+                    self.settings["anti_spam"] = 'on'
 
                 else:
 
@@ -516,6 +589,7 @@ class Server:
                 if self.settings["anti_spam"] == "on":
 
                     desc += f':white_check_mark: Störenfriede ab sofort wieder zugelassen... :rolling_eyes:'
+                    self.settings["anti_spam"] = 'off'
 
                 else:
 
@@ -540,7 +614,6 @@ class Server:
 
         return desc
 
-
     def help(self, mode, member):
 
         member = self.members[member]
@@ -551,15 +624,15 @@ class Server:
             desc += '\n\n**General Commands**'
 
             # HELP COMMAND
-            desc += '\n\n**__help__**\n' # Command name
+            desc += '\n\n**__help__**\n'  # Command name
             desc += '\nSyntax: `ehre help <command>`'  # Syntax
-            desc += '\nAliases: `help`' # Aliases
-            desc += '\nInfo: Zeigt Hilfe für command.' # Short description of command
+            desc += '\nAliases: `help`'  # Aliases
+            desc += '\nInfo: Zeigt Hilfe für command.'  # Short description of command
 
             # STATS COMMAND
             desc += '\n\n**__stats__**\n'  # Command name
             desc += '\nSyntax: `ehre stats`'  # Syntax
-            desc += '\nAliases: `stats`, `statistics`' # Aliases
+            desc += '\nAliases: `stats`, `statistics`'  # Aliases
             desc += '\nInfo: Zeigt allgemeine Statistiken des Servers.'  # Short description of command
 
             desc += '\n\n**Member Commands**'
@@ -567,19 +640,19 @@ class Server:
             # DONATION COMMAND
             desc += '\n\n**__donate__**\n'  # Command name
             desc += '\nSyntax: `ehre donate <member>`'  # Syntax
-            desc += '\nAliases: `donate`' # Aliases
+            desc += '\nAliases: `donate`'  # Aliases
             desc += '\nInfo: Tägliche Spende an <member> vergeben.'  # Short description of command
 
             # DONATIONS COMMAND
             desc += '\n\n**__donations__**\n'  # Command name
             desc += '\nSyntax: `ehre donations`'  # Syntax
-            desc += '\nAliases: `donations`' # Aliases
+            desc += '\nAliases: `donations`'  # Aliases
             desc += '\nInfo: Zeigt, wer gespendet hat und wer nicht.'  # Short description of command
 
             # VOTE COMMAND
             desc += '\n\n**__vote__**\n'  # Command name
             desc += '\nSyntax: `ehre vote <member> <ehre> <grund>`'  # Syntax
-            desc += '\nAliases: `vote`, `votum`' # Aliases
+            desc += '\nAliases: `vote`, `votum`'  # Aliases
             desc += '\nInfo: Erstellt ein Votum für diese Person.'  # Short description of command
 
             desc += '\n\n**Admin Commands**'
@@ -602,8 +675,8 @@ class Server:
 
             desc += '**__stats__**\n'
             desc += '\n**Syntax:** `ehre stats`'  # Syntax
-            desc += '\n**Aliases:** `stats`, `statistics`' # Aliases
-            desc += '\n**Ausführbar von:** Allen' # Who is able to run it
+            desc += '\n**Aliases:** `stats`, `statistics`'  # Aliases
+            desc += '\n**Ausführbar von:** Allen'  # Who is able to run it
             desc += '\n**Beschreibung:**\n Dieser Befehl gibt dir einen Überblick über die Statistiken des Servers. ' \
                     'Dazu zählt zum Beispiel, wer das ehrenhafteste Mitglied und wer der ehrenloseste ist, aber auch, ' \
                     'wieviel Ehre jedes Mitglied im Durchschnitt hat.'
@@ -660,8 +733,6 @@ class Server:
 
         return discord.Embed(title='Help', description=desc, colour=random.randint(0, 16777215))
 
-
-
     def get_stats(self):
 
         member_count = sum(1 if not m.bot else 0 for m in self.guild_obj.members)
@@ -683,7 +754,6 @@ class Server:
                 max_ehre_usr = member.name
 
             all_ehre += ehre
-
 
         avg_ehre = int(all_ehre / member_count)
         stats += f':money_mouth: Ehrenhaftestes Mitglied: **{max_ehre_usr}**, **{max_ehre}** Ehre\n:shit: Ehrenlosester Kek: **{min_ehre_usr}**, **{min_ehre}** Ehre\n:scales: Durchschnittliche Ehre: **{avg_ehre}** Ehre'
@@ -717,7 +787,8 @@ class Server:
     async def member_ehre_history(self, ctx, mode):
 
         member = self.members[ctx.author.id]
-        emb = discord.Embed(title=f'Accountverlauf von {member.name}', description=member.transaction_hist, colour=random.randint(0, 16777215))
+        emb = discord.Embed(title=f'Accountverlauf von {member.name}', description=member.transaction_hist,
+                            colour=random.randint(0, 16777215))
         if mode in ['private', 'Privat', 'privat']:
 
             await ctx.author.send(embed=emb)

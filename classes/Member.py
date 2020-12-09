@@ -12,6 +12,8 @@ class Member:
         self.balance = 0
         self.antispam_score = 0
         self.bans = 0
+        self.warns = 0
+        self.violations = 0
         self.warned = False
         self.transaction_hist = ''
         self.donated = False
@@ -47,7 +49,9 @@ class Member:
         with open(f'{self.save_dir}/accounts/{str(self.member_id)}.acc') as save:
             data = json.load(save)
         self.balance = data["balance"]
-        self.bans = data["warns"]
+        self.bans = data["bans"]
+        self.warns = data["warns"]
+        self.violations = data["violations"]
         self.transaction_hist = data["transaction_hist"]
         self.donated = data["donated"]
         self.has_vote = data["has_vote"]
@@ -57,7 +61,9 @@ class Member:
         with open(f'{self.save_dir}/accounts/{str(self.member_id)}.acc', 'w') as save:
             data = {}
             data["balance"] = self.balance
-            data["warns"] = self.bans
+            data["bans"] = self.bans
+            data["warns"] = self.warns
+            data["violations"] = self.violations
             data["transaction_hist"] = self.transaction_hist
             data["donated"] = self.donated
             data["has_vote"] = self.has_vote

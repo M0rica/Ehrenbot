@@ -3,6 +3,7 @@ import random
 import os
 import sys
 import time
+from datetime import datetime
 from shutil import rmtree, copytree
 
 import discord
@@ -10,6 +11,7 @@ from discord.ext import commands
 
 sys.path.append(f'{os.getcwd()}/classes')
 sys.path.append(f'{os.getcwd()}/utils')
+
 from Server import Server
 from utils import log, has_permission
 
@@ -64,7 +66,8 @@ async def on_member_join(member):
 async def on_message(ctx):
 
     if not ctx.author.bot:
-        servers[ctx.guild.id].process_msg(ctx)
+
+        await servers[ctx.guild.id].process_msg(ctx)
 
         if ctx.channel.category.name == 'ehrenbot':
 
@@ -188,6 +191,6 @@ for folder in folders:
         os.mkdir(folder)
 log('Starting bot')
 
-client.run('TOKEN')
+client.run('NzMzMDM3MTExMjU4Nzc1NTgy.Xw9UAg.PUjEqSmIrIC_i6FIAufmLod8ouU')
 
-log('Bot stopped')
+log('Bot stopped', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
