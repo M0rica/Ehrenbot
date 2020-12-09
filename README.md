@@ -18,6 +18,7 @@ Meine Originalidee für Ehrenbot war, einen Discord Bot zu schaffen, welcher ein
 * Viele Einstellungen können für jeden Server individuell angepasst werden
 * Easy to use mit Umfassenden Erklärungen
 * Antispam System
+* Eine Botinstanz kann auf mehreren Server gleichzeitig laufen
 * Regelmäßige Updates mit neuen Features!
 
 **Wie füge ich Ehrenbot auf meinem Server hinzu?**
