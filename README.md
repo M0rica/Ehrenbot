@@ -10,7 +10,10 @@ Meine Originalidee für Ehrenbot war, einen Discord Bot zu schaffen, welcher ein
 
 * Einführung einer digitalen Währung auf dem Server, welche jedes Mitglied bewertet
   * Mitglieder können täglich jemandem Ehre spenden, Abstimmungen über das Verhalten anderer einrichten, sich ihren Kontoverlauf ansehen und vieles Mehr!
-* Verschiedene Admin Kommands, welche Moderatoren das Leben erleichtern (zugriff auf logs etc.)
+* Verschiedene Admin Kommands, welche Moderatoren das Leben erleichtern
+  * optionale Zensierung von Schimpfwörtern im Chat
+  * Zugriff auf bestimmte logs
+  * Weitere Features in Zukunft!
 * Kein kompliziertes Setup notwendig, der Bot richtet alles automatisch ein!
 * Viele Einstellungen können für jeden Server individuell angepasst werden
 * Easy to use mit Umfassenden Erklärungen
