@@ -29,11 +29,13 @@ class Server:
         self.settings = {
             "role": self.guild_obj.default_role,
 
-            "anti_spam": "on",
+            "anti_spam": "off",
             "censor_chat": False,
             "spam_block_time": 10,
+            "ban_members": False,
 
             "vote_time": 15,
+            "vote_threshold": 3,
 
             "lottery": "off",
         }
@@ -98,9 +100,10 @@ class Server:
                 "anti_spam": self.settings["anti_spam"],
                 "censor_chat": self.settings["censor_chat"],
                 "spam_block_time": self.settings["spam_block_time"],
+                "ban_members": self.settings["ban_members"],
 
                 "vote_time": self.settings["vote_time"],
-                "vote_threshold": 2,
+                "vote_threshold": 3,
 
                 "lottery": self.settings["lottery"]
             }
@@ -115,6 +118,8 @@ class Server:
         for member in self.members:
             self.members[member].save()
 
+        self.log('Done!')
+
     # =====Load data from disk=====#
     def load(self):
 
@@ -127,6 +132,7 @@ class Server:
 
             self.settings = data["settings"]
             self.settings["role"] = get(self.guild_obj.roles, id=self.settings["role"])
+            self.check_settings()
             self.blocked_users = data["blocked_users"]
             self.table_channel = data["table_channel"]
             self.table_channel = self.guild_obj.get_channel(self.table_channel)
@@ -182,7 +188,7 @@ class Server:
     async def repair(self):
 
         self.log('An error occurred while loading saved data, trying to repair server data...')
-        self.set_default_settings()
+        self.check_settings()
         await self.create_discord_channels()
 
     # =====Create standart discord channels on a server, either called on setup or repair=====#
@@ -238,20 +244,26 @@ class Server:
             self.table_id = msg.id
 
     # =====Set default server settings if data is missing or corrupt=====#
-    def set_default_settings(self):
+    def check_settings(self):
 
-        self.settings = {
+        default_settings = {
             "role": self.guild_obj.default_role,
 
             "anti_spam": "on",
             "censor_chat": False,
             "spam_block_time": 10,
+            "ban_members": False,
 
             "vote_time": 15,
             "vote_threshold": 3,
 
             "lottery": "off",
         }
+
+        for setting in default_settings:
+
+            if setting not in self.settings:
+                self.settings[setting] = default_settings[setting]
 
     # =====Add new member to internal member list=====#
     def add_member(self, member):
@@ -296,7 +308,7 @@ class Server:
         self.updates += 1
         now = datetime.datetime.now()
 
-        self.log('Refreshing Ehre table...')
+        self.log('Refreshing Ehre table')
 
         old_msg: discord.Message
         old_msg = await self.table_channel.fetch_message(self.table_id)
@@ -314,14 +326,14 @@ class Server:
             vote_threshold = int(round(len(self.members) / 12.5))
             self.settings["vote_threshold"] = vote_threshold if vote_threshold > 3 else 3
 
-            self.log('Updating player names...')
+            self.log('Updating player names')
             for member in self.guild_obj.members:
 
                 if not member.bot:
                     self.members[member.id].name = member.display_name
 
         # check for votes to be evaluated
-        self.log('Evaluating votes...')
+        self.log('Evaluating votes')
         for member in list(self.votes.keys()):
 
             vote = self.votes[member]
@@ -331,9 +343,11 @@ class Server:
             if votum_time >= vote.time:
                 await self.eval_vote(member)
 
-        self.log('Running antispam...')
+        # antispam
+        self.log('Performing antispam')
         await self.perform_antispam()
 
+        # check member's behavior
         for member in self.members.values():
 
             if member.warns >= 3:
@@ -342,11 +356,16 @@ class Server:
                 member.bans += 1
 
             if member.violations >= 3:
-
                 if member.warns == 0:
                     await self.warn_member(member)
                 member.violations = 0
-                member.warns += 1
+
+            if self.settings["ban_members"] and member.bans >= 3:
+                await self.ban_member
+
+
+
+        self.log("Done!")
 
     async def perform_antispam(self):
 
@@ -355,7 +374,7 @@ class Server:
             if member.antispam_score >= 12:
 
                 if member.warned:
-                    await self.suspend_member(member)
+                    asyncio.run_coroutine_threadsafe(self.suspend_member(member), asyncio.get_event_loop())
 
                 else:
                     await self.warn_member(member,
@@ -369,6 +388,7 @@ class Server:
                           reason=f'Es gibt echt nicht viele Regeln die du befolgen musst, aber wenn du so weiter machst schaffst du es trozdem dir ne beurlaubung zu verdiehnen...'):
 
         member.warned = True
+        member.warns += 1
         self.transaction(member, -25, 'Vorwarnung wegen Regelverstoß')
         member = self.guild_obj.get_member(member.member_id)
 
@@ -378,13 +398,14 @@ class Server:
     # suspend member from chat for a period of time
     async def suspend_member(self, member, reason=''):
 
-        if not reason:
-            reason = f':partying_face: Herzlichen Glückwunsch! Du, ja, genau **du** hast dir eine {blocked_user_entry["block_time"]} Minuten Auszeit auf dem Server **{self.name}** verdient! Genieße sie!'
         blocked_user_entry = {
             "blocked_at": int(datetime.datetime.now().strftime("%Y%m%d%H%M")),
             "block_time": self.settings["spam_block_time"]
         }
         self.blocked_users[member.member_id] = blocked_user_entry
+
+        if not reason:
+            reason = f':partying_face: Herzlichen Glückwunsch! Du, ja, genau **du** hast dir eine {blocked_user_entry["block_time"]} Minuten Auszeit auf dem Server **{self.name}** verdient! Genieße sie!'
 
         member.warned = False
         member.bans += 1
@@ -397,6 +418,14 @@ class Server:
         await asyncio.sleep(3)
         await member.send(
             'By the way, Regelverstöße werden bei uns mit der Peitsche bestraft, trau dich nur wieder on zu kommen :smiling_imp:')
+
+    async def ban_member(self, member):
+
+        member.server_bans += 1
+        member.transaction(member, -500, 'Big Mac ban den weg')
+        member = self.guild_obj.get_member(member.member_id)
+        await member.send(f'Gut gemacht, du wurdest auf dem Server {self.name} gebannt!')
+        await member.ban(reason='Zu viele Regelverstöße')
 
     # =====Reset daily donations for this server=====#
     def reset_donations(self):
@@ -464,6 +493,7 @@ class Server:
             desc += f'\nAnti-spam: **{self.settings["anti_spam"]}**'
             desc += f'\nChat zensieren: **{"on" if self.settings["censor_chat"] else "off"}**'
             desc += f'\nBlockierung bei starkem Verstoß gegen Regeln: **{self.settings["spam_block_time"]} min**'
+            desc += f'\nMitglieder bei wiederholten Regelvertößen vom Server bannen: **{"on" if self.settings["ban_members"] else "off"}**'
 
             desc += f'\nZeit für Abstimmungen: **{self.settings["vote_time"]} min**'
             desc += f'\nMindesbeteiligung für Abstimmungen: **{self.settings["vote_threshold"]} Personen**'
@@ -558,6 +588,28 @@ class Server:
 
                     desc += ':x: Bitte gib die Zeit in Minuten als Ganzzahl zwischen 1 und 1440 (24 Stunden) an!'
 
+        elif setting in ['ban', 'bannen', 'bans']:
+
+            if not change:
+
+                desc += '**Ban Members**\n\n'
+
+                desc += f'**Status:** {":white_check_mark:" if self.settings["ban_members"] else ":x:"}\n'
+
+                desc += '**Einstellung ändern:** `ehre settings ban <on/off>`'
+                desc += '**Gültige Einstellungen:** `on`; `off`'
+
+                desc += '**Info:** Hier kann festgelegt werden, ob Mitglieder bei wiederholten Regelverstößen vom Server gebannt werden sollen.'
+
+            elif change == 'on':
+
+                if self.settings["ban_members"]:
+                    desc += ':x: Member werden bereits gebannt!'
+
+                else:
+                    desc += ':white_check_mark:'
+
+
         elif setting in ['antispam', 'anti-spam']:
 
             if not change:
@@ -614,6 +666,7 @@ class Server:
 
         return desc
 
+    #=====Bot standart help command=====#
     def help(self, mode, member):
 
         member = self.members[member]
@@ -733,6 +786,7 @@ class Server:
 
         return discord.Embed(title='Help', description=desc, colour=random.randint(0, 16777215))
 
+    #=====Get general stats about the server=====#
     def get_stats(self):
 
         member_count = sum(1 if not m.bot else 0 for m in self.guild_obj.members)
@@ -762,6 +816,26 @@ class Server:
 
         return stats
 
+    #=====Get a users profile=====#
+    def get_profile(self, member):
+
+        member_obj = self.guild_obj.get_member(member)
+        member = self.members[member]
+        desc = f'**von {member.name}**'
+
+        desc += f'\n\nKontostand: **{member.balance}** Ehre'
+
+        desc += f'\n\nDiscord Account erstellt: **{str(member_obj.created_at).split(".")[0]}**'
+        desc += f'\nAuf dem Server seit: **{str(member_obj.joined_at).split(".")[0]}**'
+
+        desc += f'\n\nHöchste Rolle: **{member_obj.top_role.name}**'
+
+        desc += f'\n\nVerhalten: **{"tadellos" if member.bans == 0 else "bischen nervig" if member.bans == 1 else "auffällig" if member.bans > 1 and member.bans < 4 else "ein move du fliegst"}**'
+        desc += f'\nVerwarnungen: **{member.warns}**'
+        desc += f'\nRegelverstöße: **{member.violations}**'
+
+        return desc
+
     async def donate(self, ctx, to_member):
 
         member = self.members[ctx.author.id]
@@ -777,7 +851,7 @@ class Server:
 
             else:
 
-                await ctx.send(f'Wie aussieht haben wir hier einen Egoisten...\n-10 Ehre dafür :grimacing:')
+                await ctx.send(f'Wie aussieht haben wir hier einen Egoisten...\n-10 Ehre dafür :grimacing:', delte_after=10)
                 member.transaction(-10, 'Egoistisches Verhalten')
 
         else:
