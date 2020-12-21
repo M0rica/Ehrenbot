@@ -1,4 +1,4 @@
-## Ehrenbot
+## Ehrenbot Discord Bot
 Ehrenbot ist ein... passiv-aggressiver moderator Bot für Discord Server mit einigen einzigartigen Features!
 
 
