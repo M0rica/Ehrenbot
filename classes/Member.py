@@ -2,6 +2,8 @@ import os
 import json
 import datetime
 
+from Exceptions import TransactionError
+
 class Member:
 
     def __init__(self, member_id: int, name: str, save_dir: str):
@@ -18,6 +20,7 @@ class Member:
         self.transaction_hist = ''
         self.donated = False
         self.has_vote = False
+        self.server_bans = 0
 
         if self.has_account():
             self.load_account()
@@ -55,6 +58,7 @@ class Member:
         self.transaction_hist = data["transaction_hist"]
         self.donated = data["donated"]
         self.has_vote = data["has_vote"]
+        self.server_bans = data["server_bans"]
 
     def save(self):
 
@@ -67,6 +71,7 @@ class Member:
             data["transaction_hist"] = self.transaction_hist
             data["donated"] = self.donated
             data["has_vote"] = self.has_vote
+            data["server_bans"] = self.server_bans
 
             json.dump(data, save, indent=4)
 
