@@ -4,7 +4,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from shutil import rmtree, copytree
+import argparse
 
 import discord
 from discord.ext import commands
@@ -13,14 +13,38 @@ sys.path.append(f'{os.getcwd()}/classes')
 sys.path.append(f'{os.getcwd()}/utils')
 
 from Server import Server
-from utils import log, has_permission
+from utils import log, has_permission, admin
 
 intents = discord.Intents.all()
 client = commands.Bot(command_prefix='ehre ', help_command=None, intents=intents)
 
+reboot = False
+devmode = False
+
 servers = {}
 
 activities = ['ehre help', 'You suck', 'Reißt die Weltherrschaft an sich', 'Überwacht euch', 'Ich seh alles!', 'Ich hasse dich nicht']
+
+async def bot_shutdown(ctx):
+
+    log('Stopping bot...')
+
+    for server in servers:
+        servers[server].save()
+
+    answers = ["Goodbye :wave:", "Thänk ju vor träwelling with Deutsche Bahn :bullettrain_front:",
+               "Bye have a great time", "Und tschüss", "Ich mach dann mal nen Abgang",
+               "Bot ist müde und geht schlafen :sleeping:", "Bruder muss los :runner:"]
+    answer = random.choice(answers)
+    await ctx.channel.send(answer)
+    await client.change_presence(status=discord.Status.idle, activity=discord.Game('Gute Nacht'))
+
+    await client.close()
+    time.sleep(3)
+
+    loop = asyncio.get_event_loop()
+    loop.stop()
+    loop.run_until_complete(loop.shutdown_asyncgens())
 
 
 @client.event
@@ -36,6 +60,7 @@ async def on_ready():
 
         await asyncio.sleep(10)
 
+        log('Updating Servers')
         for server in servers:
             await servers[server].update()
 
@@ -78,38 +103,64 @@ async def on_message(ctx):
 
                 msg = await client.get_context(ctx)
                 if msg.valid:
-                    await client.process_commands(ctx)
+                    if devmode and str(ctx.author) != admin:
+                        await ctx.channel.send(embed=discord.Embed(title=':warning: Devmode aktiv :warning:',
+                                                                 description='Der Bot befindet sich grade im Testmodus, Bugfixes oder neue Features werden getestet weshalb vorrübergehend keine Kommands zur Verfügung stehen!',
+                                                                    colour=random.randint(0, 16777215)))
+                    else:
+                        await client.process_commands(ctx)
+
+                elif has_permission(ctx.author, ctx.guild, 3) and ctx.content.startswith('//') or ctx.content.startswith('dev'):
+
+                    aliases = {
+                        'reboot': 'reload',
+                        'shut': 'shutdown',
+                        'devmode': 'testmode'
+                    }
 
 
-@client.command(aliases=['shut'])
+                    func = ctx.content.replace('//', '')
+                    if func in aliases:
+                        func = aliases[func]
+                    func += '(ctx)'
+                    await eval(func)
+
+
 async def shutdown(ctx):
 
     if has_permission(ctx.author, ctx.guild, 3):
 
-        log('Stopping bot...')
-
-        for server in servers:
-            servers[server].save()
-
-        answers = ["Goodbye :wave:", "Thänk ju vor träwelling with Deutsche Bahn :bullettrain_front:",
-                   "Bye have a great time", "Und tschüss", "Ich mach dann mal nen Abgang",
-                   "Bot ist müde und geht schlafen :sleeping:", "Bruder muss los :runner:"]
-        answer = random.choice(answers)
-        await ctx.send(answer)
-        await client.change_presence(status=discord.Status.idle, activity=discord.Game('Gute Nacht'))
-
-        await client.close()
-        time.sleep(3)
-
-        loop = asyncio.get_event_loop()
-        loop.stop()
-        loop.run_until_complete(loop.shutdown_asyncgens())
-
-        #sys.exit()
+        await bot_shutdown(ctx)
 
     else:
 
         await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
+
+
+async def reload(ctx):
+
+    if has_permission(ctx.author, ctx.guild, 3):
+
+        global reboot
+        await ctx.channel.send('Bot wird neu gestartet...')
+        reboot = True
+        await bot_shutdown(ctx)
+
+    else:
+
+        await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
+
+async def testmode(ctx):
+
+    global devmode
+    if devmode:
+        devmode = False
+        desc = 'Devmode deaktiviert!'
+    else:
+        devmode = True
+        desc = 'Devmode aktiviert!'
+
+    await ctx.channel.send(desc)
 
 @client.command(aliases=['Stats', 'statistics', 'Statistics'])
 async def stats(ctx):
@@ -166,6 +217,29 @@ async def donations(ctx, action=''):
     emb = discord.Embed(title='Donations', description=desc, colour=random.randint(0, 16777215))
     await ctx.send(embed=emb)
 
+@client.command(aliases=['account'])
+async def profile(ctx, member: discord.Member=None):
+
+    desc = ''
+    profile_pic = None
+    member = ctx.author if not member else member
+
+    if member == ctx.author or has_permission(ctx.author, ctx.guild, 2):
+
+        if not member.bot:
+            desc = servers[ctx.guild.id].get_profile(member.id)
+            profile_pic = member.avatar_url
+
+        else:
+            desc = 'Bots haben keine Accounts!'
+
+    else:
+        desc = 'Zugriff verweigert'
+
+    emb = discord.Embed(title='Member profile', description=desc, colour=random.randint(0, 16777215))
+    emb.set_thumbnail(url=profile_pic)
+    await ctx.send(embed=emb)
+
 @client.command()
 async def help(ctx, mode=''):
 
@@ -182,6 +256,12 @@ async def settings(ctx, setting='', mode=''):
     emb = discord.Embed(title='Settings :memo:', description=desc, colour=random.randint(0, 16777215))
     await ctx.send(embed=emb)
 
+parser = argparse.ArgumentParser(description='Basic parser for Ehrenbot')
+
+parser.add_argument('--devmode', default=False, action='store_true', help='start bot in devmode')
+
+args = parser.parse_args()
+devmode = args.devmode
 
 folders = ["guild_data", "guild_data/_backups", "guild_data/_default", "guild_data/_default/logs"]
 for folder in folders:
@@ -194,3 +274,8 @@ log('Starting bot')
 client.run('TOKEN')
 
 log('Bot stopped', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+if reboot:
+    log('Reboot', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+    time.sleep(3)
+    os.execv(sys.executable, ['python'] + sys.argv + (['--devmode'] if devmode else []))
+
