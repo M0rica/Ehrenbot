@@ -1,8 +1,7 @@
 import datetime
 import json
 
-admin = 'ADMINNAME#ADMINTAG'
-
+config = {}
 
 def log(info, timestamp=datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"), server='SYSTEM'):
     info = f'[{timestamp}] ({server}) {info}\n'
@@ -32,6 +31,11 @@ def has_permission(author, guild, level):
         return False
 
 def load_config():
-    with open(f'config.json', 'r') as conf:
-        configs = json.load(conf)
-    return configs
+    if not config:
+        with open(f'config.json', 'r') as conf:
+            configs = json.load(conf)
+        return configs
+    else:
+        return config
+
+admin = load_config()["admin"]
