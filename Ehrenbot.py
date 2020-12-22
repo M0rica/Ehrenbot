@@ -13,18 +13,24 @@ sys.path.append(f'{os.getcwd()}/classes')
 sys.path.append(f'{os.getcwd()}/utils')
 
 from Server import Server
-from utils import *
+from utils import has_permission, log, load_config
 from systemstats import get_system_stats
 
+# Discord bot client settings
 intents = discord.Intents.all()
 client = commands.Bot(command_prefix='ehre ', help_command=None, intents=intents)
 
+# settings related to devcommands
 reboot = False
 devmode = False
+
+# load configuration from config.json
 config = load_config()
+admin = config["admin"]
 
 servers = {}
 
+# Bot game activities
 activities = ['ehre help', 'You suck', 'Reißt die Weltherrschaft an sich', 'Überwacht euch', 'Ich seh alles!', 'Ich hasse dich nicht']
 
 async def bot_shutdown(ctx):
