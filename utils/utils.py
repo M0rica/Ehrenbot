@@ -1,4 +1,5 @@
 import datetime
+import json
 
 admin = 'ADMINNAME#ADMINTAG'
 
@@ -29,3 +30,8 @@ def has_permission(author, guild, level):
         return True
     else:
         return False
+
+def load_config():
+    with open(f'config.json', 'r') as conf:
+        configs = json.load(conf)
+    return configs
