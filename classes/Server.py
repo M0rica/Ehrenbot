@@ -155,8 +155,9 @@ class Server:
 
     def load_base_data(self):
 
-        with open('base_data/banned_words_eng.txt', 'r') as f:
-            self.banned_words = f.read().split('\n')
+        for file in ['banned_words_eng.txt', 'banned_words_de.txt']:
+            with open(f'base_data/{file}', 'r') as f:
+                self.banned_words += f.read().lower().split('\n')
 
     # =====Set new server up, either on join or on reboot=====#
     async def setup(self):
@@ -289,15 +290,16 @@ class Server:
         # inappropriate language
         if self.settings["censor_chat"]:
 
-            banned_word = False
-            for word in self.banned_words:
-                if word in msg_list:
-                    banned_word = True
+            banned_words = 0
+            for word in msg_list:
+                if word in self.banned_words or word.endswith('nutte') or word.endswith('hure') or word.endswith('ficker') or word.endswith('fick'):
+                    banned_words += 1
 
-            if banned_word:
-                self.transaction(member, -25, "unerlaubte Wörter benutzt")
-                await ctx.channel.send(f'Achte auf deine Wortwahl, **{member.name}**!', delete_after=15)
+            if banned_words > 0:
+                self.transaction(member, -3*banned_words, "unerlaubte Wörter benutzt")
                 await ctx.delete()
+                await ctx.channel.send(f'Achte auf deine Wortwahl, **{member.name}**!', delete_after=15)
+
                 member.violations += 1
 
     # =====Update server events, such as votes=====#
@@ -545,11 +547,11 @@ class Server:
 
                 if self.settings["censor_chat"]:
                     self.settings["censor_chat"] = False
-                    desc += f'Chat wird jetzt nichtmehr zensiert!'
+                    desc += f':white_check_mark: Chat wird jetzt nichtmehr zensiert!'
 
                 else:
                     self.settings["censor_chat"] = True
-                    desc += f'Chat wird jetzt zensiert!'
+                    desc += f':white_check_mark: Chat wird jetzt zensiert!'
 
             else:
 
@@ -608,6 +610,10 @@ class Server:
 
                 else:
                     desc += ':white_check_mark:'
+
+            else:
+
+                desc += 'Unbekanntes Befehlsargument für `ban`!'
 
 
         elif setting in ['antispam', 'anti-spam']:
@@ -821,7 +827,7 @@ class Server:
 
         member_obj = self.guild_obj.get_member(member)
         member = self.members[member]
-        desc = f'**von {member.name}**'
+        desc = f'von **{member.name}**' + (' (owner)' if self.guild_obj.owner == member_obj else '')
 
         desc += f'\n\nKontostand: **{member.balance}** Ehre'
 
@@ -830,12 +836,13 @@ class Server:
 
         desc += f'\n\nHöchste Rolle: **{member_obj.top_role.name}**'
 
-        desc += f'\n\nVerhalten: **{"tadellos" if member.bans == 0 else "bischen nervig" if member.bans == 1 else "auffällig" if member.bans > 1 and member.bans < 4 else "ein move du fliegst"}**'
+        desc += f'\n\nVerhalten: **{"tadellos" if member.bans == 0 and member.warns == 0 else "(fast) tadellos" if member.bans == 0 and member.warns > 0 else "bischen nervig" if member.bans == 1 else "auffällig" if member.bans > 1 and member.bans < 4 else "ein move du fliegst"}**'
         desc += f'\nVerwarnungen: **{member.warns}**'
         desc += f'\nRegelverstöße: **{member.violations}**'
 
         return desc
 
+    #=====daily donation function=====#
     async def donate(self, ctx, to_member):
 
         member = self.members[ctx.author.id]
@@ -861,7 +868,7 @@ class Server:
     async def member_ehre_history(self, ctx, mode):
 
         member = self.members[ctx.author.id]
-        emb = discord.Embed(title=f'Accountverlauf von {member.name}', description=member.transaction_hist,
+        emb = discord.Embed(title=f'Accountverlauf von {member.name}', description=member.transaction_hist.split('\n')[:-10],
                             colour=random.randint(0, 16777215))
         if mode in ['private', 'Privat', 'privat']:
 
