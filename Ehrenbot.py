@@ -13,13 +13,15 @@ sys.path.append(f'{os.getcwd()}/classes')
 sys.path.append(f'{os.getcwd()}/utils')
 
 from Server import Server
-from utils import log, has_permission, admin
+from utils import *
+from systemstats import get_system_stats
 
 intents = discord.Intents.all()
 client = commands.Bot(command_prefix='ehre ', help_command=None, intents=intents)
 
 reboot = False
 devmode = False
+config = load_config()
 
 servers = {}
 
@@ -32,19 +34,62 @@ async def bot_shutdown(ctx):
     for server in servers:
         servers[server].save()
 
-    answers = ["Goodbye :wave:", "Thänk ju vor träwelling with Deutsche Bahn :bullettrain_front:",
-               "Bye have a great time", "Und tschüss", "Ich mach dann mal nen Abgang",
-               "Bot ist müde und geht schlafen :sleeping:", "Bruder muss los :runner:"]
-    answer = random.choice(answers)
-    await ctx.channel.send(answer)
-    await client.change_presence(status=discord.Status.idle, activity=discord.Game('Gute Nacht'))
+    if not reboot:
+        answers = ["Goodbye :wave:", "Thänk ju vor träwelling with Deutsche Bahn :bullettrain_front:",
+                   "Bye have a great time", "Und tschüss", "Ich mach dann mal nen Abgang",
+                   "Bot ist müde und geht schlafen :sleeping:", "Bruder muss los :runner:"]
+        answer = random.choice(answers)
+        await ctx.channel.send(answer)
+        await client.change_presence(status=discord.Status.idle, activity=discord.Game('Gute Nacht'))
 
     await client.close()
-    time.sleep(3)
 
     loop = asyncio.get_event_loop()
     loop.stop()
-    loop.run_until_complete(loop.shutdown_asyncgens())
+    await loop.shutdown_asyncgens()
+
+#=====Dev functions=====#
+async def shutdown(ctx):
+
+    if has_permission(ctx.author, ctx.guild, 3):
+
+        await bot_shutdown(ctx)
+
+    else:
+
+        await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
+
+
+async def reload(ctx):
+
+    if has_permission(ctx.author, ctx.guild, 3):
+
+        global reboot
+        await ctx.channel.send('Bot wird neu gestartet...')
+        reboot = True
+        await bot_shutdown(ctx)
+
+    else:
+
+        await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
+
+async def testmode(ctx):
+
+    global devmode
+    if devmode:
+        devmode = False
+        desc = 'Devmode deaktiviert!'
+    else:
+        devmode = True
+        desc = 'Devmode aktiviert!'
+
+    await ctx.channel.send(desc)
+
+async def sysstats(ctx):
+
+    emb = discord.Embed(title='Systemstats', description=await get_system_stats(), colour=random.randint(0, 16777215))
+
+    await ctx.channel.send(embed=emb)
 
 
 @client.event
@@ -71,7 +116,10 @@ async def on_ready():
 
         await asyncio.sleep(10)
 
-        await client.change_presence(activity=discord.Game(random.choice(activities)))
+        if not devmode:
+            await client.change_presence(activity=discord.Game(random.choice(activities)))
+        else:
+            await client.change_presence(activity=discord.Game('Devmode aktiv'))
 
         await asyncio.sleep(10)
 
@@ -115,7 +163,10 @@ async def on_message(ctx):
                     aliases = {
                         'reboot': 'reload',
                         'shut': 'shutdown',
-                        'devmode': 'testmode'
+                        'devmode': 'testmode',
+                        'system': 'sysstats',
+                        'systemstats': 'sysstats',
+                        'usage': 'sysstats'
                     }
 
 
@@ -126,44 +177,8 @@ async def on_message(ctx):
                     await eval(func)
 
 
-async def shutdown(ctx):
-
-    if has_permission(ctx.author, ctx.guild, 3):
-
-        await bot_shutdown(ctx)
-
-    else:
-
-        await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
-
-
-async def reload(ctx):
-
-    if has_permission(ctx.author, ctx.guild, 3):
-
-        global reboot
-        await ctx.channel.send('Bot wird neu gestartet...')
-        reboot = True
-        await bot_shutdown(ctx)
-
-    else:
-
-        await ctx.send('Du hast nicht die Berechtigungen für diesen Befehl!', delete_after=10)
-
-async def testmode(ctx):
-
-    global devmode
-    if devmode:
-        devmode = False
-        desc = 'Devmode deaktiviert!'
-    else:
-        devmode = True
-        desc = 'Devmode aktiviert!'
-
-    await ctx.channel.send(desc)
-
-@client.command(aliases=['Stats', 'statistics', 'Statistics'])
-async def stats(ctx):
+@client.command(aliases=['Server', 'serverstats', 'Serverstats', 'serverstatistics', 'Serverstatistics'])
+async def server(ctx):
 
     guild = servers[ctx.guild.id]
 
@@ -271,11 +286,11 @@ for folder in folders:
         os.mkdir(folder)
 log('Starting bot')
 
-client.run('TOKEN')
+client.run(config["token"])
 
 log('Bot stopped', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 if reboot:
-    log('Reboot', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+    log('REBOOT', datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
     time.sleep(3)
     os.execv(sys.executable, ['python'] + sys.argv + (['--devmode'] if devmode else []))
 
