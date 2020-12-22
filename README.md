@@ -34,7 +34,7 @@ Ehrenbot funktioniert wie fast alle Discord Bots über einen Kommandprefix, der 
 Ja, klar kannst du eine Ehrenbot-Instanz auch auf deinem eigenen Pc laufen lassen. Hierfür benötigst du zunächst einen API Token. Das ist im Prinzip ein privater zugang zu Discord für deinen Bot so wie für dich deine Email und Passwort. Diesen Token bekommst du follgendermaßen:
 * Als erstest downloadest du dieses Repository entweder mit git oder indem du auf "Download zip" klickst und den Ordner in einen Ordner deiner Wahl entpackst.
 * Du brauchst zudem Python (getestet mit Python 3.7.6), such einfach nach einem Tutorial wie man Pyhton installiert wenn du noch kein Python auf deinem Pc installiert hast und mach dannach hier weiter.
-* Als nächstes musst [hier](https://discord.com/developers/) du einen Discord Developer Account erstellen, sofern du noch keinen Besitzt.
+* Als nächstes musst du [hier](https://discord.com/developers/) einen Discord Developer Account erstellen, sofern du noch keinen Besitzt.
 * Wenn du deinen Developer Account erstellt hast, klick auf "New Application" um eine neue App für Discord zu erstellen.
 * Nachdem die App erstellt wurde, klick auf das Menu "Bot" und dann auf den Button "Add Bot" und dann auf "Yes, do it".
 * Nun ist deine App als Bot registriert. Den Token des Bots erhältst du, indem du bei Token neben dem Profilbild des Bots auf "copy token" kilckst. Der Token wird dann in deine Zwischenablage kopiert.
